@@ -1,0 +1,42 @@
+; I94124: 512 KB flash, 192 KB SRAM. Reserve low SRAM for PDMA descriptors.
+LR_IROM1 0x00000000 0x00080000
+{
+    ER_IROM1 0x00000000 0x00080000
+    {
+        startup_I94100.o (RESET, +First)
+        *(InRoot$$Sections)
+        .ANY (+RO)
+    }
+    DMA_20000100 0x20000100 UNINIT 0x20
+    {
+        pdma_init.o (.ARM.__at_0x20000100)
+    }
+    DMA_20000120 0x20000120 UNINIT 0x20
+    {
+        pdma_init.o (.ARM.__at_0x20000120)
+    }
+    DMA_20000140 0x20000140 UNINIT 0x20
+    {
+        pdma_init.o (.ARM.__at_0x20000140)
+    }
+    DMA_20000160 0x20000160 UNINIT 0x20
+    {
+        pdma_init.o (.ARM.__at_0x20000160)
+    }
+    DMA_20000180 0x20000180 UNINIT 0x20
+    {
+        pdma_init.o (.ARM.__at_0x20000180)
+    }
+    DMA_200001A0 0x200001A0 UNINIT 0x20
+    {
+        pdma_init.o (.ARM.__at_0x200001A0)
+    }
+    DMA_200001C0 0x200001C0 UNINIT 0x20
+    {
+        pdma_init.o (.ARM.__at_0x200001C0)
+    }
+    RW_IRAM1 0x20000200 0x0002FE00
+    {
+        .ANY (+RW +ZI)
+    }
+}

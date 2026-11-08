@@ -1,0 +1,96 @@
+# Keil build output and per-user debugger state
+**/KEIL/obj/
+**/KEIL/lst/
+**/Objects/
+**/Listings/
+**/build.log
+*.uvguix*
+*.uvoptx
+*.uvopt
+*.bak
+
+# Generated firmware includes proprietary algorithm code.
+# Generated diagnostic startup reuses the existing SDK with a private stack setting.
+**/Diagnostics/KEIL/generated/
+**/Diagnostics/StackControl/KEIL/generated/
+**/Diagnostics/StackControl/KEIL/inputs/
+*.axf
+*.elf
+*.hex
+*.bin
+
+# Colsonic distribution requires separate permission.
+**/Colsonic/*.lib
+
+# Local evidence and workstation paths
+verification/initial_split_bin/
+verification/schematic_review/
+verification/docs_review/
+verification/channel_tests/
+verification/encoding_review/
+verification/channel_change_*.json
+verification/register_review/
+verification/legacy_channel_inventory.json
+verification/original_base_sha256.json
+
+# Local documentation tools and OS state
+node_modules/
+.DS_Store
+Thumbs.db
+
+# Local engineering records and raw user data
+/.local/
+/docs/internal/
+/verification/
+/test_wave/
+/docs/REVIEW.md
+/docs/LEGACY_CHANNELS.md
+/AGENTS.md
+/CLAUDE.md
+/WORKSPACE_RULES.md
+/SPEC.md
+/SELF_CHECK.md
+/HANDOFF.md
+/CODEX_HANDOFF.md
+/MANUAL_CLEANUP.md
+# Independent diagnostics retain their own historical configuration locally
+**/Diagnostics/
+/BUILD_AUDIO_DIAG.ps1
+/BUILD_STACK_CONTROL.ps1
+/scripts/audio_diag_build.py
+/scripts/stack_control_build.py
+/scripts/analyze_audio_diag.py
+/tests/test_audio_diag_capture.py
+/tests/RUN_AUDIO_DIAG_TESTS.ps1
+/tests/audio_diag_host_test.c
+# IDE user state, backups, packages and generated binaries
+**/__LA/
+**/backup/
+**/NuLink*.ini
+*.uvguix.*
+*.AveryC
+*.o
+*.obj
+*.d
+*.dep
+*.crf
+*.map
+*.lnp
+*.htm
+*.log
+*.exe
+*.dll
+*.a
+*.lib
+*.zip
+*.7z
+*.xlsx
+*.wav
+*.jpg
+*.sample
+*.pyc
+**/__pycache__/
+.env
+.env.*
+*.pem
+*.key

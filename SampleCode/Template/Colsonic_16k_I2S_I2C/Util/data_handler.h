@@ -1,0 +1,113 @@
+#ifndef __UAC_HANDLER_H__
+#define __UAC_HANDLER_H__
+
+#include "stdint.h" 
+#include "usb_audio_def.h"
+#include "buf_def.h"
+
+typedef struct _uac_playback_t
+{
+	uint8_t  u8AudioSpeakerState;  
+	uint32_t u32PlaySampleRate;
+	uint8_t  u8BitRes;
+	uint8_t  u8SubFrm;
+	uint8_t  u8Channel;
+
+	uint32_t au32USB_RingBuff[SPK_RING_BUFFER_LEN];
+	uint16_t u16UAC_Buff_ReadIndex;
+	uint16_t u16UAC_Buff_WriteIndex;	
+	uint16_t u16AvalCnt;  
+	
+	// parameters
+	uint8_t  usbd_PlayMute;       /* Play MUTE control. 0 = normal. 1 = MUTE */
+	int16_t  usbd_PlayVolume;    /* Play channel volume. */
+	int16_t  usbd_PlayMaxVolume; 
+	int16_t  usbd_PlayMinVolume; 
+	int16_t  usbd_PlayResVolume; 
+	
+	int16_t  usbd_PlayCurVolume;   
+	uint8_t usbd_PlayVolumeIndex;
+} UAC_PLAYBACK_T;
+
+typedef struct _uac_recoder_t
+{
+	uint8_t  u8AudioMicState;
+	uint8_t  u8BitRes;
+	uint8_t  u8SubFrm;
+	uint8_t  u8Channel;
+	uint32_t u32RecRate;	
+	
+	uint8_t au8USB_RingBuff[MIC_RING_BUFFER_LEN];
+	uint16_t u16UAC_Buff_ReadIndex;
+	uint16_t u16UAC_Buff_WriteIndex;
+	uint16_t u16AvalCnt;  
+	
+	// parameters
+	uint8_t usbd_RecMute;       /* Record MUTE control. 0 = normal. 1 = MUTE */
+	int16_t usbd_RecVolume;    /* Record channel volume. */
+	int16_t usbd_RecMaxVolume;  
+	int16_t usbd_RecMinVolume;  
+	int16_t usbd_RecResVolume;  
+
+} UAC_RECODER_T;
+
+
+typedef struct _data_manager_t
+{
+// Far end
+    //I2S
+	uint32_t au32I2S_Tx_Buff[2][I2S_TX_BUF_LEN]; 
+	uint8_t u8I2S_Tx_Buff_Index;
+	uint8_t bI2S_Tx_Mute;
+	uint16_t u16FarI2STmp[2][COLSONIC_DAT_LEN];
+	uint16_t u16FarI2STmpWIdx;	
+	uint8_t u8FarI2STmp_Buf_Idx;
+	// SPI_I2S
+	uint32_t au32SPI_I2S_Tx_Buff[2][I2S_TX_BUF_LEN]; 
+	uint16_t u16SPI_I2S_Tx_Buff_ReadIndex;
+	uint16_t u16SPI_I2S_Tx_Buff_WriteIndex;
+	uint16_t u16SPI_I2S_Tx_AvalCnt; 
+
+// Near end
+    // I2S
+	uint32_t au32I2S_Rx_Buff[2][I2S_RX_BUF_LEN]; 
+	uint8_t u8I2S_Rx_Buff_Index;
+	uint16_t u16NearI2STmp[2][COLSONIC_DAT_LEN];
+	uint16_t u16NearI2STmpWIdx;
+	uint8_t u8NearI2STmp_Buf_Idx;
+	// SPI_I2S
+	uint32_t au32SPI_I2S_Rx_Buff[2][I2S_RX_BUF_LEN]; 
+	uint16_t u16SPI_I2S_Rx_Buff_ReadIndex;
+	uint16_t u16SPI_I2S_Rx_Buff_WriteIndex;
+	uint16_t u16SPI_I2S_Rx_AvalCnt; 
+	
+    // DMIC
+	uint32_t au32DMIC_Buff[2][DMIC_BUF_LEN]; 
+	uint8_t u8DMIC_Buff_Index;	
+	uint16_t u16NearDmicTmp[2][COLSONIC_DAT_LEN];
+	uint16_t u16NearDmicTmpWIdx;	
+	uint8_t u8NearDmicTmp_Buf_Idx;
+	
+	// Colsonic
+	uint8_t bByPass; // near end direct to decode
+	uint16_t* pu16Near;
+	uint8_t bNearReady;
+	uint16_t* pu16Far;
+    uint8_t bFarReady;
+	uint16_t u16DecodeTmp[COLSONIC_DAT_LEN];
+	uint32_t u32Decode[2][COLSONIC_DAT_LEN];
+	uint8_t u8Decode_Buf_Idx;
+	uint16_t u16DecodeBufRIdx;
+	uint16_t u16DecodeAvalCnt;  
+		
+// USB 
+	UAC_PLAYBACK_T* psUacPlayback;
+	UAC_RECODER_T* psUacRecord;
+}DATA_MANAGER;
+
+#endif //__UAC_HANDLER_H__
+
+/*** (C) COPYRIGHT 2018 Nuvoton Technology Corp. ***/
+
+
+  

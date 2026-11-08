@@ -1,0 +1,5 @@
+# Source files use ASCII (a subset of UTF-8); documentation may use UTF-8 Chinese.
+root = true
+
+[*]
+charset = utf-8
