@@ -7,6 +7,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from check_build_delivery import BINARY_HASHES, KEIL_OPTIONS, TARGETS, validate as check_build_delivery
+
 
 class PublicationError(RuntimeError):
     pass
@@ -37,11 +40,13 @@ def paths(root, *args):
 
 
 def safe_path(name):
+    if name in BINARY_HASHES or name in KEIL_OPTIONS:
+        return
     p = name.lower()
     parts = p.split('/')
     denied = {'verification', 'test_wave', '.local', '__la', 'backup', '__pycache__',
               'diagnostics', 'node_modules', 'obj', 'lst', 'objects', 'listings'}
-    if (any(x in denied for x in parts) or p.startswith('docs/internal/')
+    if (any(x in denied or x.startswith('.verify_') for x in parts) or p.startswith('docs/internal/')
             or p in {'docs/review.md', 'docs/legacy_channels.md', 'build_audio_diag.ps1',
                      'build_stack_control.ps1'}
             or any(x in p for x in ('audio_diag', 'stack_control'))
@@ -58,6 +63,10 @@ def safe_path(name):
 
 
 def safe_content(name, data):
+    if name in BINARY_HASHES:
+        if hashlib.sha256(data).hexdigest() != BINARY_HASHES[name]:
+            raise PublicationError('Unreviewed build dependency content: ' + name)
+        return
     if len(data) >= 100 * 1024 * 1024:
         raise PublicationError('File exceeds GitHub size limit: ' + name)
     if re.search(rb'(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|'
@@ -162,7 +171,7 @@ def remote_head(root, config, adapter):
     return remote
 
 
-def local_plan(root, config):
+def local_plan(root, config, require_delivery=True):
     if Path(git(root, 'rev-parse', '--show-toplevel')).resolve() != root:
         raise PublicationError('Unexpected Git top-level.')
     if config['branch'] != 'main' or git(root, 'symbolic-ref', '--short', 'HEAD') != config['branch']:
@@ -178,6 +187,11 @@ def local_plan(root, config):
     if paths(root, 'diff', '--cached', '--name-only'):
         raise PublicationError('Existing staged work must be reviewed separately.')
     files = snapshot(root)
+    if require_delivery:
+        try:
+            check_build_delivery(root, files)
+        except ValueError as error:
+            raise PublicationError(str(error)) from error
     history_guard(root)
     board_gate(root, config, files)
     changed = paths(root, 'ls-files', '--others', '--exclude-standard')
@@ -207,9 +221,9 @@ def verify_tree(root, revision, expected):
 
 
 def publish(root, config, check_only=False, message='Update NAU88C22 APM demo',
-            confirm=input, adapter=None):
+            confirm=input, adapter=None, require_delivery=True):
     adapter = adapter or GitHubRemote()
-    plan = local_plan(root, config)
+    plan = local_plan(root, config, require_delivery)
     print('Destination: ' + config['repository'] + ' (' + config['visibility'] + ')')
     for name in plan['changed']:
         print(('DELETE ' if name not in plan['files'] else 'UPDATE ') + name)
@@ -232,7 +246,7 @@ def publish(root, config, check_only=False, message='Update NAU88C22 APM demo',
     if answer != config['repository']:
         print('Cancelled; no staging/commit/push.')
         return
-    if local_plan(root, config) != plan or remote_head(root, config, adapter) != remote:
+    if local_plan(root, config, require_delivery) != plan or remote_head(root, config, adapter) != remote:
         raise PublicationError('Local/remote state changed after review; preview again.')
     if plan['changed']:
         specs = ('\0'.join(plan['changed']) + '\0').encode('utf-8')

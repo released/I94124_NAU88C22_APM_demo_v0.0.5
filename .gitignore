@@ -19,7 +19,7 @@
 *.hex
 *.bin
 
-# Colsonic distribution requires separate permission.
+# Binary variants are excluded unless reviewed build inputs are listed below.
 **/Colsonic/*.lib
 
 # Local evidence and workstation paths
@@ -40,6 +40,7 @@ Thumbs.db
 
 # Local engineering records and raw user data
 /.local/
+/.verify_*/
 /docs/internal/
 /verification/
 /test_wave/
@@ -94,3 +95,12 @@ Thumbs.db
 .env.*
 *.pem
 *.key
+
+# Complete build delivery, matching the v0.0.2a repository policy.
+!/SampleCode/Template/Colsonic_16k_USB_UAC/Colsonic/colsonic_apm_v0.0.5_20260213_0_0.lib
+!/SampleCode/Template/Colsonic_16k_USB_UAC/Colsonic/colsonicdata.bin
+!/SampleCode/Template/Colsonic_16k_I2S_I2C/Colsonic/colsonic_apm_v0.0.5_20260213_0_0.lib
+!/SampleCode/Template/Colsonic_16k_I2S_I2C/Colsonic/colsonicdata.bin
+!/SampleCode/Template/Colsonic_16k_USB_UAC/Library/CMSIS/Lib/ARM/arm_cortexM4lf_math.lib
+!/SampleCode/Template/Colsonic_16k_USB_UAC/KEIL/Colsonic_apm.uvoptx
+!/SampleCode/Template/Colsonic_16k_I2S_I2C/KEIL/Colsonic_16k.uvoptx

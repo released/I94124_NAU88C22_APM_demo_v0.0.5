@@ -59,7 +59,8 @@ class PublisherTests(unittest.TestCase):
     def publish(self, **kwargs):
         with contextlib.redirect_stdout(io.StringIO()):
             pub.publish(self.root, self.config, adapter=self.adapter,
-                        confirm=kwargs.pop('confirm', lambda _: 'fixture/example'), **kwargs)
+                        confirm=kwargs.pop('confirm', lambda _: 'fixture/example'),
+                        require_delivery=False, **kwargs)
 
     def test_empty_repeat_and_no_change(self):
         self.publish(check_only=True)
@@ -181,16 +182,38 @@ class PublisherTests(unittest.TestCase):
             stream.write('*.lib\n*.bin\n')
         record['dependencies'] = deps
         (self.root / '.local/hardware_acceptance.json').write_text(json.dumps(record))
-        self.publish(check_only=True)
-        dependency = self.root / next(iter(deps))
-        original = dependency.read_bytes()
-        dependency.write_bytes(b'changed')
-        with self.assertRaises(pub.PublicationError):
+        with mock.patch.dict(pub.BINARY_HASHES, deps):
             self.publish(check_only=True)
-        dependency.write_bytes(original)
-        (self.root / 'SampleCode/main.c').write_text('int main(void) { return 1; }\n')
+            dependency = self.root / next(iter(deps))
+            original = dependency.read_bytes()
+            dependency.write_bytes(b'changed')
+            with self.assertRaises(pub.PublicationError):
+                self.publish(check_only=True)
+            dependency.write_bytes(original)
+            (self.root / 'SampleCode/main.c').write_text('int main(void) { return 1; }\n')
+            with self.assertRaises(pub.PublicationError):
+                self.publish(check_only=True)
+
+    def test_reviewed_binary_delivery(self):
+        for name in pub.BINARY_HASHES:
+            pub.safe_path(name)
+            pub.safe_content(name, (ROOT / name).read_bytes())
+            with self.assertRaises(pub.PublicationError):
+                pub.safe_content(name, b'wrong dependency')
+        for name in pub.KEIL_OPTIONS:
+            pub.safe_path(name)
+        for name in ['firmware.bin', 'extra.lib', 'KEIL/obj/firmware.bin', '.local/copy.lib']:
+            with self.assertRaises(pub.PublicationError):
+                pub.safe_path(name)
+        available = set(pub.snapshot(ROOT))
+        self.assertEqual(pub.check_build_delivery(ROOT, available)['result'], 'PASS')
+        for missing in [*pub.BINARY_HASHES, *pub.KEIL_OPTIONS,
+                        'SampleCode/Template/Colsonic_16k_USB_UAC/Util/misc.c',
+                        'SampleCode/Template/Colsonic_16k_I2S_I2C/KEIL/I94124.sct']:
+            with self.assertRaises(ValueError):
+                pub.check_build_delivery(ROOT, available - {missing})
         with self.assertRaises(pub.PublicationError):
-            self.publish(check_only=True)
+            pub.local_plan(self.root, self.config)
 
     def test_live_metadata_guards(self):
         pub.git(self.root, 'remote', 'set-url', 'origin', 'https://github.com/fixture/example.git')
@@ -228,7 +251,9 @@ def retire(work, manifest):
                  and re.fullmatch(r'pub_[0-9a-f]{12}', work.parent.name))
     legacy_run = (work.parent.parent == boundary / 'docs_review/publisher_tests'
                   and work.name == 'work' and re.fullmatch(r'[0-9a-f]{32}', work.parent.name))
-    if not (short_run or legacy_run):
+    checkout_run = (work.parent.parent == ROOT and work.name == 'w'
+                    and re.fullmatch(r'\.verify_[0-9a-f]{8}', work.parent.name))
+    if not (short_run or legacy_run or checkout_run):
         raise RuntimeError('Unexpected fixture boundary')
     # Extended syntax addresses the same validated Windows path, including old
     # fixtures whose teardown stopped during enumeration before any deletion.

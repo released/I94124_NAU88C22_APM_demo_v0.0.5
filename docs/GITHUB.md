@@ -18,10 +18,19 @@ github_push.bat -Message "Update audio documentation"
 | 納入 | 保留本機 |
 |---|---|
 | 兩份一般專案、所需 SDK、英文原始碼註解 | 原始錄音、截圖、原理圖、工程紀錄 |
+| 各自的 Colsonic library／profile、SDK binary、共用 Keil `.uvoptx` | 未選用的 library 變體與個人 `.uvguix` 狀態 |
 | README、完整流程、matrix 與操作文件 | 獨立診斷專案及其量測工具／保存映像 |
 | Build／verify、相關測試原始碼、同步入口 | Compiler 輸出、IDE 個人狀態、Nu-Link 設定 |
-| 第三方原始聲明與相依檔資訊 | Colsonic `.lib`、`colsonicdata.bin`、封閉韌體映像 |
+| 第三方原始聲明與相依檔資訊 | 產生的 firmware BIN／HEX／AXF |
 
 Public 韌體範圍需有對應版本與介面的實板驗收。上傳工具以本機驗收紀錄的來源摘要核對範圍；後續韌體變更需重新核對驗收。該紀錄保留本機，不包含在公開 checkout。
 
-相依檔放置方式與原始聲明見[第三方組件](../THIRD_PARTY_NOTICES.md)。
+交付方式與 v0.0.2a 相同：必要的 library、profile、SDK 與 Keil 專案設定一併提供，完整 checkout 不需再另補相依 binary。
+
+```powershell
+python -B .\scripts\check_build_delivery.py --publication
+```
+
+上傳預覽及更新模式均檢查 build inputs，必要檔案被忽略、遺失或 binary 雜湊不同時會停止。只有明確列出的 binary／共用 options 可以納入，其他產物仍排除。
+
+相依檔版本與原始聲明見[第三方組件](../THIRD_PARTY_NOTICES.md)。

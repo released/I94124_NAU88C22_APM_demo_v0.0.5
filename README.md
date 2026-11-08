@@ -1,72 +1,80 @@
 # I94124 NAU88C22 APM Demo v0.0.5
 
-本專案提供 I94124／NAU88C22 的 USB UAC 與 I2C/I2S 音訊範例，使用相同的 Colsonic APM v0.0.5 library、參數 profile 與記憶體配置。兩種介面各自建置、分別燒錄；正常上行皆為左 Near、右 Decode。
+本專案提供 I94124／NAU88C22 的 USB UAC 與 I2C/I2S 音訊範例，使用相同的 Colsonic APM library、參數 profile 與記憶體配置。兩種介面的傳輸與處理觸發條件不同，正常上行均為左 Near、右 Decode。
 
-- USB UAC：PC 經本板播放音訊，並錄回麥克風處理前／後的 stereo PCM。
-- I2C/I2S：embedded host 經 I2S 收送 PCM，I2C 用於啟停、輸出選擇與 NAU88C22 控制。
-- 本 repository 不包含封閉的 Colsonic `.lib` 與 `colsonicdata.bin`，建置需另備合法取得的相符檔案。
-- 本範例適用 NAU88C22 板級設定；不包含 NAU88L21 板型。
+- `v0.0.5` 對應本專案使用的 Colsonic library；版本與 SHA-256 於下表記錄。
+- Repository 包含建置所需的 Colsonic library、profile、SDK 與 Keil 專案設定，交付方式與 v0.0.2a 一致。
+- 兩份一般專案的 NS preset 均為 `0.85f`，startup stack 均為 4 KiB；板型為 NAU88C22。
 
 ## 完整流程文件
 
 | 文件 | 內容 |
 |---|---|
-| **[USB 完整流程](docs/USB_UAC_FLOW.md)** | PC playback → 喇叭／Far、麥克風／Near → APM → PC record，以及 endpoint、RAM、PDMA 與串流狀態 |
-| **[I2C/I2S 完整流程](docs/I2C_I2S_FLOW.md)** | Host I2S 收送、正常／bypass、RAM／PDMA，以及現有 I2C command 表與封包範例 |
-| [共用啟動與音訊流程](docs/FLOW.md) | 開機、主迴圈、中斷、APM frame 交接及控制路徑 Mermaid 圖 |
-| [聲道／RAM／PDMA matrix](docs/CHANNEL_MATRIX.md) | 訊號來源、buffer 容量與單位、PDMA channel／descriptor、左右聲道封裝 |
-| [NS API 與調整方向](docs/COLSONIC_NS.md) | `Colsonic_ns_set()` 的現行值、增加／降低的取捨與修改位置 |
-| [GoldWave 與 I2S 操作](docs/GOLDWAVE_TEST.md) | 背景播放、現場人聲、雙講與聲道觀察方法 |
+| **[USB 完整流程](docs/USB_UAC_FLOW.md)** | PC 播放 → 喇叭／Far、麥克風／Near → APM → USB 錄音，以及 endpoint／RAM／PDMA 流程 |
+| **[I2C/I2S 完整流程](docs/I2C_I2S_FLOW.md)** | Host I2S 音訊、正常／bypass 模式、buffer 流程，以及完整 I2C command 表與封包範例 |
 
-## 聲道速記：正常「左前右後」，bypass「左播右收」
+兩份文件與 README 使用 repository 相對連結；目錄結構一併上傳至 GitHub 後，可從首頁開啟完整文件及其中的 Mermaid 流程圖。
 
-左／右是板子回傳給 host 的兩個觀察聲道，由應用程式封裝決定，並非 APM 規定 Near 必須放左聲道。
+## 聲道速記：「收音、播放參考、處理結果」
 
-- **Near＝收音**：麥克風經 CODEC ADC、I2S0 RX 收到的 PCM，尚未進入 APM；可能包含現場人聲、喇叭回音與環境聲。
-- **Far＝播放參考**：準備送往 CODEC DAC 的數位 PCM；新聞播報或歌曲人聲也屬於這個播放參考。
-- **Decode＝處理結果**：`Colsonic_apm_proc(Near, Far, Decode)` 的輸出，目標為降低回音與雜音、保留現場語音；不是語音辨識文字或音訊檔案解碼。
+這裡的**左／右，是板子回傳給 host 的兩個觀察聲道**，用來比較不同階段的訊號。
 
-| 模式 | 左聲道代表什麼 | 右聲道代表什麼 | 觀察方式 |
+- USB：GoldWave 可分別播放或觀察左／右聲道。
+- I2S：embedded host 接收兩個聲道，內容依正常／bypass 模式決定。
+
+- **Near＝麥克風收進來的聲音，APM 處理前。** 現場人聲、喇叭傳回麥克風的音樂／回音、環境雜音，都可能在裡面。
+- **Far＝準備送去喇叭播放的數位參考。** 例如 PC／host 送來的音樂或新聞；播放素材裡的歌聲、播報人聲也屬於 Far。
+- **Decode＝Near 經 AEC/NR 處理後的結果。** 目標是保留現場人聲、降低回音與雜音；實際仍可能有殘餘背景或人聲損失，效果以錄音量測為準。
+
+**口訣：USB／I2C 正常都是左前右後；I2C bypass 左播右收。**「前／後」指 APM 處理前／後，「播／收」指數位播放參考／麥克風收音。
+
+| 模式 | 左聲道代表什麼 | 右聲道代表什麼 | 比較用途 |
 |---|---|---|---|
-| USB 正常：Near／Decode | 處理前的麥克風混合收音 | AEC/NR 處理後的結果 | 左邊觀察人聲＋背景，右邊觀察人聲保留與背景殘留 |
-| I2C/I2S 正常：Near／Decode | 處理前的麥克風混合收音 | AEC/NR 處理後的結果 | 與 USB 相同 |
-| 僅 I2C/I2S bypass：Far／Near | 送往喇叭的數位播放參考 | 處理前的麥克風混合收音 | 比較播放參考與實際收音；此組沒有 Decode |
+| **USB 正常：Near／Decode** | **處理前**：麥克風原始收音 | **處理後**：AEC/NR 結果 | 左邊聽原始人聲＋背景，右邊聽處理後保留多少人聲、剩多少背景 |
+| **I2C/I2S 正常：Near／Decode** | **處理前**：麥克風原始收音 | **處理後**：AEC/NR 結果 | 與 USB 相同：左邊觀察原始收音，右邊觀察處理結果 |
+| **僅 I2C/I2S 可操作的 bypass：Far／Near** | **播放參考**：送往喇叭的音樂／新聞 PCM | **收音**：麥克風實際收到的人聲＋背景 | 對照播放參考與實際收音；這組輸出沒有 Decode |
 
-- 「前／後」指 APM 處理前／後；「播／收」指數位播放參考／麥克風收音。
-- I2C 正常與 bypass 都可固定取右聲道作語音：正常取 Decode，bypass 取 Near。
-- Bypass 只選擇回傳訊號，APM 仍運算；USB 不提供 bypass 入口。
-- AEC 的 Near／Far 輸入角色固定；只交換回傳左右位置，不會交換演算法輸入。
+例如 PC 經本板播放音樂，同時在麥克風前說「你好」：
 
-```mermaid
-flowchart TD
-    HOST["Host 播放 PCM"] --> TX["MCU 準備 CODEC I2S0 TX"]
-    TX --> SPK["NAU88C22 DAC → 喇叭"]
-    TX --> FAR["低 16 bits → Far 播放參考"]
-    SPK -. "聲學回音" .-> MIC["麥克風：現場人聲＋回音＋環境聲"]
-    MIC --> NEAR["NAU88C22 ADC → I2S0 RX → Near"]
-    NEAR --> APM["主迴圈 APM：Near＋Far → Decode"]
-    FAR --> APM
-    APM --> PACK["正常：左 Near、右 Decode"]
-    NEAR --> PACK
-    PACK --> UP["USB record 或 SPI2-I2S TX → Host"]
-```
+- Near：麥克風可能同時收到「你好」與音樂回音。
+- Far：送來播放的音樂 PCM。
+- Decode：上述收音經 AEC/NR 處理後的結果。
+- USB 與 I2C/I2S 正常模式均為左原始混合聲、右處理結果。
 
-## 1. 專案入口與建置
+- **正常模式比較「處理前／後」**：Near 與 Decode 用於觀察處理效果。
+- **Bypass 對照「麥克風收音／播放參考」**：只切換回傳內容，APM 仍會執行。
+- 各訊號的 RAM／PDMA 位置列於後面的聲道及 buffer matrix。
 
-| 項目 | USB UAC | I2C 控制＋I2S 音訊 |
+## 1. 範例與專案入口
+
+| 項目 | USB UAC 範例 | I2C 控制＋I2S 音訊範例 |
 |---|---|---|
-| 資料夾 | `SampleCode/Template/Colsonic_16k_USB_UAC` | `SampleCode/Template/Colsonic_16k_I2S_I2C` |
+| 資料夾 | `Colsonic_16k_USB_UAC` | `Colsonic_16k_I2S_I2C` |
+| 完整流程、buffer 與操作說明 | [USB 詳細文件](docs/USB_UAC_FLOW.md) | [I2C/I2S 詳細文件與 command 表](docs/I2C_I2S_FLOW.md) |
 | Keil 專案 | [Colsonic_apm.uvprojx](SampleCode/Template/Colsonic_16k_USB_UAC/KEIL/Colsonic_apm.uvprojx) | [Colsonic_16k.uvprojx](SampleCode/Template/Colsonic_16k_I2S_I2C/KEIL/Colsonic_16k.uvprojx) |
-| Target／輸出名稱 | `NAU88C22_USB_UAC_APM005` | `NAU88C22_I2S_I2C_APM005` |
-| Host 音訊入口／出口 | USB EP3 OUT／EP2 IN | SPI2-I2S RX／TX |
-| APM 開始條件 | Host 開啟 USB record interface | 開機自動 `Start_Audio()` |
-| APM frame 觸發 | RX callback 確認 Near／Far ready 後，發布 `bDoAECReady` | 前景檢查 `bNearReady` |
+| Keil target | `NAU88C22_USB_UAC_APM005` | `NAU88C22_I2S_I2C_APM005` |
+| 外部使用者 | PC，例：GoldWave 錄音／背景音播放 | Embedded host：I2C 下指令、I2S 收送 PCM |
+| 音訊入口 | USB playback OUT；CODEC 麥克風 ADC | Host SPI2-I2S RX；CODEC 麥克風 ADC |
+| 音訊出口 | CODEC 喇叭；USB record IN | CODEC 喇叭；Host SPI2-I2S TX |
+| APM 開始條件 | Host 開啟 USB record interface | 開機 `Misc()` 直接呼叫 `Start_Audio()` |
+| APM frame 觸發 | Near、Far ready 後，RX handler 設 `bDoAECReady` | 前景程式只檢查 `bNearReady` |
 
-建置環境為 Windows、Keil µVision 5／Arm Compiler 6.22、`Nuvoton.AudioSoCs_DFP.1.0.0` device pack，以及可建置此映像大小的 compiler license。命令列檢查另需 Python 3；文件檢查使用 Node.js。
+文件依名詞與聲道 matrix、端到端流程、buffer／PDMA 表及原始碼索引組織。共用 Mermaid 流程見 [FLOW.md](docs/FLOW.md)，完整 RAM／PDMA 對照見 [CHANNEL_MATRIX.md](docs/CHANNEL_MATRIX.md)。
 
-1. 保留完整 repository 結構與兩份範例的 SDK。
-2. 依[第三方組件與相依檔](THIRD_PARTY_NOTICES.md)補入兩份相同的授權 Colsonic library／profile。
-3. 開啟上表 Keil target 執行 Rebuild，或在根目錄執行以下命令。
+### 建置環境
+
+| 項目 | 專案設定 |
+|---|---|
+| IDE／compiler | Keil µVision 5、Arm Compiler 6.22，以及可建置此映像大小的有效授權 |
+| I2C/I2S device pack | `Nuvoton.NuVoice_ISD_DFP.1.0.20` |
+| USB device pack | `Nuvoton.NuVoice_ISD_DFP.1.0.20` |
+| Target device | `I94124` |
+
+1. Clone 或下載完整 repository，保留目錄結構，包含根目錄 SDK、USB 範例自帶 SDK、各自的 `Colsonic/` 與 `KEIL/`。
+2. 安裝對應 device pack，開啟上表連結的 Keil 專案與 target。
+3. 執行 Rebuild；AXF／BIN／HEX 產生於各範例的 `KEIL/obj/`，由 Git 預設忽略。無需另外補入 library 或 profile。
+
+命令列建置與檢查另需 Python 3；從根目錄執行：
 
 ```powershell
 .\BUILD.ps1 -Target All
@@ -75,111 +83,205 @@ flowchart TD
 .\VERIFY.ps1 -Target All
 ```
 
-- `BUILD.ps1` 預設使用 `C:\Keil_v5\UV4\UV4.exe`，可用 `-UV4` 指定 IDE 位置；建置後呼叫 `VERIFY.ps1`。
-- `VERIFY.ps1` 使用 Keil `fromelf` 核對實際映像中的 NS 傳參，需可用的工具與授權環境。
-- AXF／BIN／HEX 位於各 target 的 `KEIL/obj/`；map 位於 `KEIL/lst/`。這些產物不納入原始碼 repository。
-- BIN 的起始位址為 `0x00000000`。燒錄時選用實際板卡與 Nu-Link probe。
+- `BUILD.ps1` 預設使用 `C:\Keil_v5\UV4\UV4.exe`，可用 `-UV4` 指定位置；完成後執行映像檢查。
+- Keil GUI Rebuild 不依賴 GitHub 同步工具或本機發布紀錄。
+- 原始碼註解採英文 ASCII；README 與流程文件採 UTF-8 繁中，避免依賴 Keil 中文碼頁。
 
-## 2. 新版 library 與 NS 調整方向
+## 2. 訊號與演算法名詞
 
-| 項目 | 兩份一般專案的設定 |
+| 名詞 | 本程式的實際來源／用途 | 容易誤解的地方 |
+|---|---|---|
+| **Near** | 麥克風經 CODEC ADC、I2S0 RX 接收後，取每個 word 的低 16 bits，尚未經 APM 處理 | 包含現場人聲、喇叭回音及環境雜音；不是只有人聲 |
+| **Far** | 準備送往 CODEC 的 I2S0 TX buffer，取低 16 bits，作為播放參考 | 是數位播放訊號；不是另一顆麥克風，也不是喇叭實際聲壓量測 |
+| **Decode** | `Colsonic_apm_proc(Near, Far, Decode)` 的處理後 PCM 輸出 | 不是 MP3 解碼、語音文字或語音辨識結果 |
+| **AEC** | 以 Far 為參考，處理 Near 裡與播放訊號相關的回音 | 若播放聲沒有經過此板的播放路徑，Far 可能沒有該背景音 |
+| **NR／NS** | Library 內的噪音抑制處理 | 現有 I2C command 沒有獨立的 NR 開關；`0x13` 是輸出選擇，見 I2C 文件 |
+
+APM 為封閉的 `.lib`：
+
+- 應用層可確認輸入、輸出與呼叫條件。
+- 內部雙講偵測、抑制強度及各模組行為，需依 library 定義及實際量測確認。
+
+```mermaid
+flowchart TD
+    PLAY["Host 播放 PCM"] --> TX["MCU：準備 CODEC I2S0 TX buffer"]
+    TX --> DAC["CODEC DAC → 喇叭"]
+    TX --> FAR["低 16 bits → Far：數位播放參考"]
+    DAC -. "聲學回音" .-> MIC["麥克風：人聲＋回音＋環境聲"]
+    SPEECH["現場說話"] --> MIC
+    MIC --> RX["CODEC ADC → I2S0 RX → Near"]
+    RX --> APM["前景 APM：Near＋Far → Decode"]
+    FAR --> APM
+    RX --> PACK["依範例／模式封裝兩個觀察聲道"]
+    FAR --> PACK
+    APM --> PACK
+    PACK --> HOST["USB record 或 SPI2-I2S TX → Host"]
+```
+
+## 3. 聲道 matrix：上行觀察聲道配置
+
+- 一個 `uint32_t` stereo word 包含兩個 16-bit PCM sample。
+- 下表依程式封裝、I2S `EVENLOW` 與 USB little-endian 順序，稱低 16 bits 為左、高 16 bits 為右。
+- I2S host 的左右位置以實際 LRCK／slot 設定為準。
+
+| 模式 | 左／word 低 16 bits | 右／word 高 16 bits | `u32Decode` 的封裝公式 | 最後輸出 buffer |
+|---|---|---|---|---|
+| USB 正常，預設 | **Near：處理前麥克風** | **Decode：處理後** | `(Decode << 16) \| Near` | USB record `au8USB_RingBuff` → EP2 |
+| I2C/I2S 正常，`0x13=1`，預設 | **Near：處理前麥克風** | **Decode：處理後** | `(Decode << 16) \| Near` | `au32SPI_I2S_Tx_Buff` → SPI2 TX |
+| I2C/I2S bypass，`0x13=0` | **Far：數位播放參考** | **Near：處理前麥克風** | `(Near << 16) \| Far` | `au32SPI_I2S_Tx_Buff` → SPI2 TX |
+
+- 新版 USB 沒有 bypass 分支或操作入口；bypass 功能由 I2C/I2S 範例提供。
+- I2C bypass 在 APM 呼叫之後選擇上行訊號，APM 仍會執行。
+
+- GoldWave 的 USB 正常錄音：**左邊為原始麥克風，右邊為處理後結果**。
+- Near 包含人聲及背景；Decode 仍可能有殘餘背景，Far 則另有其數位播放來源。
+- 左右聲道由 `Colsonic_Work_Handle()` 將兩個 mono 訊號封裝成 stereo word 時決定；APM 本身沒有指定 Near 或 Decode 必須放左聲道。
+- APM 的輸入角色固定為 `Near`（麥克風）與 `Far`（播放參考）；交換上行左右位置不會交換這兩個演算法輸入。
+- 目前聲道配置與 v0.0.2a repository 的對齊版本一致；更早的原始 I2C 左 Decode／右 Near 接收端，需改取右聲道處理結果。
+- I2C bypass 也與新版 APM v0.0.5 相同：左 Far、右 Near；原始範例為左 Near、右 Far。
+- I2C 右聲道在正常模式為處理後的 Decode，在 bypass 為處理前的 Near，適合 host 固定以右聲道接收語音。
+
+## 4. RAM／PDMA buffer matrix
+
+- 傳輸格式：16 kHz、16-bit、stereo；APM 的 Near／Far／Decode 各為 mono。
+- 表內大小：各 buffer 的容量，整體 firmware RAM 另含其他資料與 stack。
+- 儲存位置：一般成員在 `g_sDataManager`，USB ring 在 `g_sUacPlayback`／`g_sUacRecord`。
+
+| Buffer／指標 | 大小與單位 | 誰寫入 → 誰讀取 | 角色 |
+|---|---|---|---|
+| `au32I2S_Rx_Buff[2][32]` | 共 256 B；每列 32 words＝128 B＝2 ms | I2S0 RX PDMA → RX IRQ handler | CODEC 麥克風原始 stereo 接收 |
+| `au32I2S_Tx_Buff[2][32]` | 共 256 B；每列 2 ms | TX IRQ handler → I2S0 TX PDMA | 喇叭播放資料；低 16 bits 另供 Far |
+| `u16NearI2STmp[2][320]` | 共 1280 B；每列 640 B＝20 ms mono | RX handler → APM／封裝 | 每次累積 32 點，10 次成一列 |
+| `u16FarI2STmp[2][320]` | 共 1280 B；每列 640 B＝20 ms mono | TX handler → APM／bypass 封裝 | 從 CODEC TX 的低 16 bits 累積 |
+| `pu16Near`、`pu16Far` | 指向已發布的 frame 列 | IRQ 發布指標 → 前景讀取 | 指標別名，不是另外複製的安全佇列 |
+| `u16DecodeTmp[320]` | 640 B＝20 ms mono | APM → 前景封裝 | Decode 處理結果；APM 以 `int16_t *` 使用 |
+| `u32Decode[2][320]` | 共 2560 B＝640 stereo words＝40 ms 容量 | 前景每次寫 320 words → IRQ 每次取 32 words | 選好左右聲道的上行 RAM 佇列；不是直接 PDMA buffer |
+| I2C 的 `au32SPI_I2S_Rx_Buff[2][32]` | 共 256 B；每列 2 ms | SPI2 RX PDMA → CODEC TX handler | Host 播放下行 |
+| I2C 的 `au32SPI_I2S_Tx_Buff[2][32]` | 共 256 B；每列 2 ms | SPI TX handler → SPI2 TX PDMA | Host 收音上行 |
+| USB playback `au32USB_RingBuff[240]` | 960 B＝240 words＝15 ms stereo | EP3 handler → CODEC TX handler | 指標及 `u16AvalCnt` 單位為 **word** |
+| USB record `au8USB_RingBuff[2560]` | 2560 B＝40 ms stereo | CODEC RX handler → EP2 handler | 指標及 `u16AvalCnt` 單位為 **byte** |
+
+- Frame 時間：`320 / 16000 = 20 ms`；PDMA row 時間：`32 / 16000 = 2 ms`。
+- **32 個 PDMA word＝128 bytes**；`u16DecodeAvalCnt` 的單位為 word。
+- USB record macro 為 `80*REC_RATE*REC_CHANNELS/1000`，儲存型別為 byte；本設定是 2560 B／40 ms 容量。
+
+## 5. CPU、IRQ、PDMA 各負責什麼？
+
+| 執行位置 | 工作 | 資料與控制範圍 |
+|---|---|---|
+| PDMA 硬體 | 依 scatter-gather descriptor 交替搬移 row 0／1，連接 I2S FIFO 與 RAM | 不會自己執行 AEC／NR 或解析 I2C command |
+| `PDMA_IRQHandler()` | 分派完成事件，抽出 Near／Far、填補播放與上行 buffer、更新指標及計數 | `u8...Index ^= 1` 是換列，不是把整份資料複製到另一列 |
+| 前景 `Colsonic_Work_Handle()` | 達到 frame 條件時呼叫 APM，將兩個 mono 訊號封裝成 stereo `u32Decode` | `Decode` 不是 CODEC 音訊解碼器 |
+| USB endpoint handler | CPU 複製 USB SRAM 與 UAC RAM ring，處理串流／feedback | USB endpoint SRAM 沒有直接交給此處的 I2S PDMA |
+| I2C0 IRQ／前景 command handler | 前者收封包及回讀一個 byte，後者執行控制動作 | I2C 只傳控制，不承載本範例 PCM 音訊 |
+| I2C1 codec handler | MCU 控制 NAU88C22 registers | 與 Host 下 command 的 I2C0 是不同匯流排 |
+| UART0 IRQ／`Main_Console_Handle()` | 收取 binary tuning 封包、讀寫 APM 參數 | 不是單純 log port；`printf` 也使用同一 UART0 |
+
+PDMA 每列 2 ms、APM frame 20 ms 是資料分塊大小；整體延遲另含 TX ping-pong、演算法、`u32Decode`、USB ring／host buffer，實際端到端延遲取決於這些路徑的排程與水位。
+
+## 6. 共用的 APM library 與配套配置
+
+- 兩份 Keil 專案各自連結相同的 `colsonic_apm_v0.0.5_20260213_0_0.lib`，並附相同的 `colsonicdata.bin`。
+- Library、profile、API header 與 memory pool 成套配置，與 v0.0.2a 同樣隨 repository 提供。
+- `ColsonicData_Keil.s` 以 `INCBIN` 載入 profile；只包含 `.lib` 而漏掉 `.bin` 仍無法完成建置。
+
+| 項目 | 兩份範例的共同設定 |
 |---|---|
 | Library | `colsonic_apm_v0.0.5_20260213_0_0.lib`，525132 bytes |
 | Library SHA-256 | `4505a89e1d13d924057dcd8c660337c7ac8bae8dd9f07bcdd10057308dc9342e` |
 | Profile | `colsonicdata.bin`，728 bytes |
 | Profile SHA-256 | `ec533a82819a0940c44b879bd0a16485a5d4699065f9781f192600dad2b62af6` |
 | APM memory pool | `85 * 1024 = 87040` bytes |
-| 音訊格式 | 16 kHz、16-bit PCM；APM 每次 320 mono samples／20 ms |
-| NS preset | `Colsonic_ns_set(0.85f)`，於 `Colsonic_apm_init()` 後呼叫 |
-| Startup stack | `0x1000`，4 KiB |
+| 音訊格式／frame | 16 kHz、PCM16；APM 每次 320 mono samples／20 ms |
+| NS preset | `Colsonic_ns_set(0.85f)` |
+| 共通配套 | 各 `Colsonic/` 的 header、source 與 `ColsonicData_Keil.s` |
 
-`Colsonic_ns_set(float percent)` 的調整方向限定於本專案使用的 binary 與適用條件：
+```powershell
+python -B .\scripts\check_build_delivery.py
+python -B .\scripts\check_build_delivery.py --publication
+```
 
-| 調整 | 預期取捨 |
+- 交付檢查涵蓋兩份 project 的 source／include、scatter、`INCBIN`、配套 binary SHA-256 與共用 Keil options，確認必要檔案沒有被 Git 忽略。
+- `VERIFY.ps1` 另核對實際映像、NS 傳參、stack 與 Flash／RAM 邊界；需要已完成的 Rebuild 與可用的 Keil 工具授權。
+
+### NS API 與調整方向
+
+`Colsonic_ns_set(float percent)` 在 `Colsonic_apm_init()` 後套用；USB 的 `Colsonic_Init()`、I2C 的 `Colsonic_Init()` 與 `Stop_Audio()` 重設路徑均設定 `0.85f`。
+
+| 調整 | 本 binary 在適用條件下的取捨 |
 |---|---|
-| 往 `1.0f` 增加 | 加強抑制；也可能讓現場人聲變弱、斷字或音色受損 |
-| 降低數值 | 保留較多聲音與細節；背景也可能更明顯 |
+| 往 `1.0f` 增加 | 加強抑制，背景可能更低；也可能讓現場人聲變弱、斷字或音色受損 |
+| 降低數值 | 保留較多聲音與細節；背景殘留也可能增加 |
 | 目前 `0.85f` | 背景抑制與語音保留的折衷設定，效果依播放、增益與雙講條件而變 |
 
-- `0.85f` 不代表「85% 降噪」，也不是固定衰減 dB；效果不能線性內插。
-- 此 binary 對一般有限值接受 `0 < percent <= 1`；`0` 不是 NR off。移除呼叫也不能視為關閉 NS。
-- USB 在 `Colsonic_Init()` 設定；I2C 在 `Colsonic_Init()` 及 `Stop_Audio()` 重設 APM 後設定，三處須一致。
-- I2C command `0x13` 是上行輸出選擇，不會改變這個 preset。UART GUI 的模組參數也不能直接等同這支 API。
-- 背景跟著人聲出現時，需同時考慮 Far 是否涵蓋播放訊號、Near／Far 時序與雙講行為；不能保證只靠此值降低背景而完全不影響人聲。
+- `0.85f` 不代表 85% 降噪或固定衰減 dB；效果不能線性內插。
+- 此 binary 對一般有限值接受 `0 < percent <= 1`；`0` 不是 NR off，移除呼叫也不能當作關閉 NS。
+- I2C `0x13` 只選擇上行訊號，未修改此 preset；UART GUI 模組參數也不能直接換算成此 API。
+- 背景跟著人聲出現時，需同時考慮 Far 參考、Near／Far 配對與雙講行為；沒有只壓背景而完全不影響人聲的保證。
+- 調整時三個呼叫點需一致，並同步更新 preset 檢查；詳見 [NS API](docs/COLSONIC_NS.md)。
 
-詳細範圍、回傳值與修改方式見 [NS API 與調整方向](docs/COLSONIC_NS.md)。
-
-## 3. RAM／PDMA matrix
-
-| 訊號／用途 | RAM buffer | 生產者 → 消費者 | 單位／容量 |
-|---|---|---|---|
-| 麥克風接收 | `au32I2S_Rx_Buff[2][32]` | I2S0 RX／PDMA ch0 → RX callback | 每 row 32 stereo words／128 B／2 ms |
-| 喇叭播放與 Far 來源 | `au32I2S_Tx_Buff[2][32]` | TX callback → I2S0 TX／PDMA ch1 | 每 row 32 words；取低 16 bits 累積 Far |
-| Near | `u16NearI2STmp[2][320]` | RX callback → `pu16Near` → APM／封裝 | 每 row 320 mono samples／20 ms |
-| Far | `u16FarI2STmp[2][320]` | TX callback → `pu16Far` → APM／bypass 封裝 | 每 row 320 mono samples／20 ms |
-| Decode | `u16DecodeTmp[320]` | APM → 正常右聲道封裝 | 640 B／20 ms mono |
-| 已封裝上行 | `u32Decode[2][320]` | 主迴圈 → 輸出 callback | 2560 B／40 ms stereo，非直接 PDMA buffer |
-| USB playback | `g_sUacPlayback.au32USB_RingBuff[240]` | EP3 → CODEC TX callback | 960 B／15 ms，count 為 word |
-| USB record | `g_sUacRecord.au8USB_RingBuff[2560]` | CODEC RX callback → EP2 | 2560 B／40 ms，count 為 byte；無 USB PDMA |
-| I2S Host 下行 | `au32SPI_I2S_Rx_Buff[2][32]` | SPI2 RX／PDMA ch6 → CODEC TX callback | 每 row 32 words／2 ms |
-| I2S Host 上行 | `au32SPI_I2S_Tx_Buff[2][32]` | 輸出 callback → SPI2 TX／PDMA ch7 | 每 row 32 words／2 ms |
-
-- 正常封裝：`Audio_PackStereo(Near, Decode)`；bypass：`Audio_PackStereo(Far, Near)`。
-- 低 16 bits 為軟體契約的左聲道，高 16 bits 為右聲道；I2S 接收端需配合 LRCK／slot 設定。
-- 10 次 32-word callback 累積一個 320-sample APM frame；buffer 容量不等於總延遲或可用處理期限。
-- 完整 descriptor 位址、計數單位及數值範例見 [matrix](docs/CHANNEL_MATRIX.md)。
-
-## 4. 操作與控制
-
-1. USB 播放裝置與 GoldWave 錄音來源均選本板 UAC，保存 stereo 錄音；先以左右相同的播放內容建立 Far 參考。
-2. 先錄背景單獨播放，再加入現場人聲；左聲道觀察混合收音，右聲道觀察處理結果。
-3. I2C/I2S 使用 SPI2 音訊；MCU 為 I2S master，embedded host 配合時脈與格式。
-
-| I2C 操作 | Write bytes | 行為 |
-|---|---|---|
-| Start | `12 01 01` | 開啟音訊傳輸；開機亦自動啟動 |
-| Stop | `12 01 00` | 停止音訊並重設 APM，重新套用 NS `0.85f` |
-| 正常輸出 | `13 01 01` | 左 Near、右 Decode |
-| Bypass 輸出 | `13 01 00` | 左 Far、右 Near；APM 仍運算 |
-
-- 主 slave address 為 7-bit `0x15`；`0x35/0x55/0x75` aliases 保留。I2C 僅傳控制，PCM 走 I2S。
-- 完整 codec command 與讀取格式見 [I2C/I2S 完整流程](docs/I2C_I2S_FLOW.md)。
-- UART0 的 `Main_Console_Handle()` 仍處理 binary tuning command；`printf` 共用 UART0，不能當成獨立 log port。
-- 原始碼註解採英文 ASCII，避免依賴 Keil 中文碼頁；繁中說明使用 UTF-8 Markdown。
-
-## 5. 板級與記憶體設定
+### Keil 目標與記憶體
 
 | 項目 | 設定 |
 |---|---|
-| MCU／CODEC | I94124／NAU88C22 |
-| APROM | `0x00000000–0x0007FFFF`，512 KiB |
-| SRAM | `0x20000000–0x2002FFFF`，192 KiB |
-| Linker | 各 target 的 `KEIL/I94124.sct`；descriptor 區段自 `0x20000100` 起，一般 RW/ZI 自 `0x20000200` 起 |
+| Device | `I94124`／NAU88C22 板型 |
+| SRAM／IRAM1 | `0x20000000–0x2002FFFF`，192 KiB |
+| APROM／IROM1 | `0x00000000–0x0007FFFF`，512 KiB |
+| Linker | 各 target 的 `KEIL/I94124.sct`，單一 Flash load region |
+| Startup stack | `0x1000`，4 KiB |
+| Descriptor／RW/ZI | Descriptor 固定位址自 `0x20000100` 起；一般 RW/ZI 自 `0x20000200` 起 |
 | CODEC 控制／音訊 | I2C1 PD0/PD1；I2S0 PD2–PD6 |
-| I2C target 的 Host 控制／音訊 | I2C0 PD14/PD15；SPI2-I2S PA7–PA10 |
+| I2C target Host 控制／音訊 | I2C0 PD14/PD15；SPI2-I2S PA7–PA10 |
 | Console | UART0 PB8/PB9，115200、8N1 |
 
-Library、profile、header、pool 與 linker 配置需成套使用。兩份一般專案不連入獨立 AudioDiag 的 RAM 擷取或額外 PDMA 計時來源。
+- APM pool、其他 buffer、全域變數、heap 與 stack 共用 SRAM，實際用量以 linker map 為準。
+- BIN 起始燒錄位址為 `0x00000000`；燒錄時選用實際板卡與 Nu-Link probe。
+- Callgraph 無法完全界定的 stack 深度，以板上 high-water 量測確認。
+- 兩份一般專案不連入獨立 AudioDiag 的 RAM 擷取或額外 PDMA 計時來源。
 
-## 6. 操作限制
+## 7. 操作與訊號觀察
 
-- I2C 只有單一 pending command，指向可重用 RX buffer；連續送命令沒有完整 queue／完成握手保護。
-- I2C `0x12` 回報最近完成的軟體啟停狀態；byte ACK 不表示前景動作已完成，也不是 DMA 健康檢測。
-- Codec 回讀取自週期 cache，約每 250 ms 更新；部分位元保留依賴 cache，不能將立即回覆視為即時硬體 readback。
-- USB 以 Near／Far ready 觸發；I2C 只等 Near。兩者都沒有 frame sequence、時間戳與完整 ownership 保護。
-- 前景落後時存在覆寫、遺失 ready 通知及 queue 計數競態風險；underrun 會補零。
-- USB mute／volume request 只儲存與回覆欄位，未套用 active PCM 或 CODEC。
-- Far 只取播放低 16 bits。不同內容的 stereo 播放，或未經本板播放的外部聲源，不保證有完整 AEC 參考。
-- Near／Decode 同 index 不代表已消除演算法延遲；混合錄音的音量差不能直接當成純語音衰減或 AEC-only ERLE。
+1. 依 Keil 專案選擇範例及 target，codec、pin、clock 與 `setting.h` 應符合實際板子。
+2. USB：PC 播放裝置與 GoldWave 錄音來源均選本板 UAC，錄音格式為 16 kHz／16-bit／stereo。
+3. 先以背景播放觀察 Near／Decode，再加入現場人聲比較雙講行為。USB 左 Near、右 Decode。初始素材可使用 L/R 相同內容，以涵蓋 Far 只取播放低 16 bits 的路徑。
+4. I2C/I2S：MCU 的 SPI2-I2S 為 **master**，host 配合時脈／格式；正常輸出為左 Near、右 Decode，bypass 為左 Far、右 Near。
+5. 無聲時的資料路徑檢查順序為來源輸入、PDMA available、Near／Far ready、`u32Decode` 產出及輸出 queue 消耗。各階段函式與 underrun 行為列於完整流程文件。
 
-## 7. 原始碼同步與第三方組件
+### I2C 音訊啟停與回讀
 
-後續同步入口為根目錄 `github_push.bat`；目的 repository 為 `released/I94124_NAU88C22_APM_demo_v0.0.5`、`main`。預覽不 stage、commit 或 push；實際更新會列出變更並要求確認。
+| 情境 | 送出的 command bytes | 動作 | 完成後讀 `0x12` |
+|---|---|---|---|
+| 開機 | 無，韌體自動啟動 | `Start_Audio()` 初始化並開啟音訊 | `1` |
+| 執行中 → Stop | `12 01 00` | 停止傳輸並重設 APM | `0` |
+| 停止中 → Start | `12 01 01` | 重新開啟傳輸 | `1` |
+| 執行中再次 Start | `12 01 01` | 維持執行，不重複啟動 | `1` |
+| 停止中再次 Stop | `12 01 00` | 維持停止，不重複停止 | `0` |
+
+- 表中回讀值為啟停動作完成後的 `0x12` 回覆。
+- I2C byte ACK 表示 byte 已接收；啟停由前景程式執行。
+
+## 8. 操作限制
+
+- `0x12` 回報最近完成的軟體啟停狀態；I2C byte ACK 不表示啟停已完成，狀態值也不是 DMA 或 codec 的健康檢測。
+- I2C 單一 pending command 指向可重用 RX buffer，沒有完整 command queue／完成握手。
+- Codec 回讀為週期 cache；部分 register 更新使用 cache 的不同 byte，位元保留情形需由硬體 readback 確認。
+- Near／Far 沒有 frame sequence／時間戳；I2C 也沒有同時等待 Far，時間對齊尚無保護。
+- Ready 旗標及雙 buffer 沒有長時間持有的所有權保護，前景處理落後時仍可能覆寫／遺失資料。
+- Underrun 會補零，overflow／遺失統計尚未完整提供；時序受輸出容量、APM 執行時間及前景 UART／I2C 工作影響。
+
+## 9. GitHub 同步
+
+- Repository、分支與預期可見性由 `github_repository.json` 指定。
+- 後續更新從專案根目錄執行 `github_push.bat`，會列出本專案未忽略的候選變更，確認後只 stage 審閱過的路徑。
+- 腳本檢查目的 repository、`main` 分支、完整建置相依檔、APM 配套、實板驗收範圍、目前檔案及提交歷史中的本機資料。
+- 遠端有尚未整合的提交時會停止，保留本機工作狀態。
 
 ```bat
 github_push.bat -CheckOnly
-github_push.bat -Message "Update audio documentation"
+github_push.bat -Message "Update audio flow documentation"
 ```
 
-- 原始碼範圍由忽略規則與上傳工具檢查；錄音、工程紀錄、IDE 個人狀態、compiler 輸出及 Colsonic binary 保留本機。
-- 第三方來源與 binary 放置方式見 [第三方組件與相依檔](THIRD_PARTY_NOTICES.md)；本 repository 不替第三方組件另行授權。
+- `-CheckOnly` 為唯讀預覽，不 stage、commit 或 push；更新模式要求輸入 repository 全名確認。
+- 必要 `.lib`、profile `.bin`、SDK 與共用 `.uvoptx` 納入；錄音、工程紀錄、個人 `.uvguix`、diagnostics 與 compiler 產物保留本機。
+- 首次更新支援已確認的空遠端；後續不自動 pull、merge 或 force push。
+- 第三方 SDK 與 library 的來源及原始聲明見 [第三方組件](THIRD_PARTY_NOTICES.md)。

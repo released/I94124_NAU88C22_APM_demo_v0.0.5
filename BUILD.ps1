@@ -18,5 +18,9 @@ foreach ($folder in $folders) {
     $process = Start-Process -FilePath $UV4 -ArgumentList $args -WindowStyle Hidden -PassThru -Wait
     Get-Content -LiteralPath $log
     if ($process.ExitCode -ne 0) { throw "Keil exit code $($process.ExitCode): $log" }
+    # Some device/pack failures return zero without producing a firmware image.
+    if ([IO.File]::ReadAllText($log) -notmatch '0 Error\(s\), 0 Warning\(s\)') {
+        throw "Keil did not report a successful target build: $log"
+    }
 }
 & (Join-Path $PSScriptRoot 'VERIFY.ps1') -Target $Target
